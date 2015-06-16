@@ -6,7 +6,7 @@ module Control.Exception.ErrorList (
     ErrorList(..), EList(..),
     throwError1, throwErrorC, addError1, addErrorC,
     assert, assertC, wrapJust, withHandler, ifErrorDo, ifErrorReturn,
-    showError, showError', errorC, oneErrorC,
+    showError, showError', errorC, oneErrorC, firstSuccess,
     inContext
   ) where
 
@@ -108,6 +108,10 @@ showError' func arg = case func arg of
 -- | Concatenates a list of `Text` and makes an error out of it.
 errorC :: [Text] -> a
 errorC = P.error . unpack . mconcat
+
+firstSuccess :: (ErrorList e, MonadError e m) => Text -> [m a] -> m a
+firstSuccess msg [] = throwError1 msg
+firstSuccess msg (a:as) = a `ifErrorDo` firstSuccess msg as
 
 -- | Pretty-prints an error list. Considers the first item of the list to
 -- be the "main" message; subsequent messages are listed after.
