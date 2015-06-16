@@ -3,10 +3,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeFamilies #-}
 module Control.Exception.ErrorList (
-    ErrorList(..),
-    throwError1, throwErrorC, addErrorC, assert, assertC, wrapJust,
-    withHandler, ifErrorDo, ifErrorReturn, showError, showError',
-    errorC, printErrors, oneError, oneErrorC
+    ErrorList(..), EList(..),
+    throwError1, throwErrorC, addError1, addErrorC,
+    assert, assertC, wrapJust, withHandler, ifErrorDo, ifErrorReturn,
+    showError, showError', errorC, oneErrorC,
+    inContext
   ) where
 
 import qualified Prelude as P
@@ -23,42 +24,53 @@ import qualified Data.Text as T
 import qualified GHC.Exts as Exts
 import Text.Render
 
-data ErrorList = ErrorList Text [Text] deriving (Show, Eq)
+class Exts.IsList elist => ErrorList elist where
+  addError :: Text -> elist -> elist
+  oneError :: Text -> elist
 
-instance Exts.IsList ErrorList where
-  type Item ErrorList = Text
-  fromList (e:es) = ErrorList e es
+data EList = EList Text [Text] deriving (Show, Eq)
+
+instance Exts.IsList EList where
+  type Item EList = Text
+  fromList (e:es) = EList e es
   fromList _ = P.error "No main message in error list"
-  toList (ErrorList msg msgs) = msg:msgs
+  toList (EList msg msgs) = msg:msgs
+
+instance ErrorList EList where
+  addError e (EList e' es) = EList e (e':es)
+  oneError e = EList e []
 
 --instance Monoid ErrorList where
 --  mempty = ErrorList mempty
 --  ErrorList el1 `mappend` ErrorList el2 = ErrorList (el1 <> el2)
 
-instance Render ErrorList where
-  render (ErrorList m msgs) = T.unlines $ "Error:" : map (sp <>) (m:msgs)
+instance Render EList where
+  render (EList m msgs) = T.unlines $ "Error:" : map (sp <>) (m:msgs)
     where sp = T.replicate 2 " "
 
 -- | Throws a single-message eror list.
-throwError1 :: MonadError ErrorList m => Text -> m a
+throwError1 :: (ErrorList e, MonadError e m) => Text -> m a
 throwError1 = throwError . oneError
 
 -- | Concatenates a list of strings and throws them as an error.
-throwErrorC :: MonadError ErrorList m => [Text] -> m a
+throwErrorC :: (ErrorList e, MonadError e m) => [Text] -> m a
 throwErrorC = throwError1 . mconcat
 
 -- | Throws a new error with the given string added on.
-addError1 :: MonadError ErrorList m => Text -> ErrorList -> m a
-addError1 newMsg (ErrorList m msgs) =
-  throwError $ ErrorList m $ msgs <> [newMsg]
+addError1 :: (ErrorList e, MonadError e m) => Text -> e -> m a
+addError1 msg = throwError . addError msg
 
 -- | Throws a new error with the concatenation of the argument added on.
-addErrorC :: MonadError ErrorList m => [Text] -> ErrorList -> m a
+addErrorC :: (ErrorList e, MonadError e m) => [Text] -> e -> m a
 addErrorC list = addError1 (mconcat list)
 
 -- | Useful when the handler is more concise than the action.
 withHandler :: MonadError e m => (e -> m a) -> m a -> m a
 withHandler = flip catchError
+
+-- | Tries something and throws an error if it fails.
+inContext :: (ErrorList e, MonadError e m) => Text -> m a -> m a
+inContext ctx action = action `catchError` addError1 ctx
 
 -- | Wraps a successful result in a `Just` and a failure in a `Nothing`.
 wrapJust :: MonadError e m => m a -> m (Maybe a)
@@ -73,12 +85,12 @@ ifErrorDo :: MonadError e m => m a -> m a -> m a
 ifErrorDo action action' = action `catchError` \_ -> action'
 
 -- | If the test is false, throws an error with the given message.
-assert :: MonadError ErrorList m => Bool -> Text -> m ()
+assert :: (ErrorList e, MonadError e m) => Bool -> Text -> m ()
 assert True _ = return ()
 assert False msg = throwError1 msg
 
 -- | Same as `assert`, but concatenates a text list.
-assertC :: MonadError ErrorList m => Bool -> [Text] -> m ()
+assertC :: (ErrorList e, MonadError e m) => Bool -> [Text] -> m ()
 assertC test = assert test . mconcat
 
 -- | Pretty-prints errors that use `Either`.
@@ -99,15 +111,11 @@ errorC = P.error . unpack . mconcat
 
 -- | Pretty-prints an error list. Considers the first item of the list to
 -- be the "main" message; subsequent messages are listed after.
-printErrors :: ErrorList -> IO ()
-printErrors (ErrorList err errs) = do
-  P.putStrLn ("Error: " <> unpack err)
-  P.mapM_ (P.putStrLn . unpack . ("  " <>)) errs
-
--- | Covers a common case of needing just one message in a list.
-oneError :: Text -> ErrorList
-oneError msg = ErrorList msg []
+--printErrors :: ErrorList e => e -> IO ()
+--printErrors (ErrorList err errs) = do
+--  P.putStrLn ("Error: " <> unpack err)
+--  P.mapM_ (P.putStrLn . unpack . ("  " <>)) errs
 
 -- | Same as `oneError` but concatenates its argument.
-oneErrorC :: [Text] -> ErrorList
+oneErrorC :: ErrorList e => [Text] -> e
 oneErrorC = oneError . mconcat
