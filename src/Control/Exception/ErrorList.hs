@@ -27,6 +27,8 @@ import Text.Render
 class Exts.IsList elist => ErrorList elist where
   addError :: Text -> elist -> elist
   oneError :: Text -> elist
+  getErrors :: elist -> [Text]
+  printErrors :: MonadIO m => elist -> m ()
 
 data EList = EList Text [Text] deriving (Show, Eq)
 
@@ -39,6 +41,12 @@ instance Exts.IsList EList where
 instance ErrorList EList where
   addError e (EList e' es) = EList e (e':es)
   oneError e = EList e []
+  getErrors = Exts.toList
+  printErrors elist = liftIO $ case getErrors elist of
+    [] -> P.putStrLn "(Unknown error)"
+    (err:errs) -> do 
+      P.putStrLn ("Error: " <> unpack err)
+      P.mapM_ (P.putStrLn . unpack . ("  " <>)) errs
 
 --instance Monoid ErrorList where
 --  mempty = ErrorList mempty
@@ -115,10 +123,7 @@ firstSuccess msg (a:as) = a `ifErrorDo` firstSuccess msg as
 
 -- | Pretty-prints an error list. Considers the first item of the list to
 -- be the "main" message; subsequent messages are listed after.
---printErrors :: ErrorList e => e -> IO ()
---printErrors (ErrorList err errs) = do
---  P.putStrLn ("Error: " <> unpack err)
---  P.mapM_ (P.putStrLn . unpack . ("  " <>)) errs
+-- printErrors :: ErrorList e => e -> IO ()
 
 -- | Same as `oneError` but concatenates its argument.
 oneErrorC :: ErrorList e => [Text] -> e

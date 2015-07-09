@@ -1,7 +1,7 @@
 { mkDerivation, base, mtl, stdenv, text, text-render }:
 mkDerivation {
   pname = "error-list";
-  version = "0.1.0.0";
+  version = "0.1.0.3";
   src = ./.;
   buildDepends = [ base mtl text text-render ];
   homepage = "http://github.com/thinkpad20/error-list";

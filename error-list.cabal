@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                error-list
-version:             0.1.0.2
+version:             0.1.0.3
 synopsis:            A useful type for collecting error messages.
 -- description:
 homepage:            http://github.com/thinkpad20/error-list
